@@ -22,13 +22,10 @@ This module provides only a single function to its user: `convert()`.
 Use it e.g. as follows, assuming you have obtained a file `scenario.hdf5` in the OMEGA format.
 
 ```python
-from omega2auto import omega_to_auto
-scenarios = omega_to_auto.convert("scenario.hdf5")
+import omega2auto
+scenarios = omega2auto.convert("scenario.hdf5")
+scenarios[0].save("/tmp/scenario0.owl")
 ```
 
 `scenarios` then contains a list of owlready2 worlds, each representing an OMEGA scenario.
-You can, for example, save the first scenario as an OWL file and inspect it in some other tool by
-
-```python
-scenarios[0].save("/tmp/scenario0.owl")
-```
+You can, for example, save the first scenario as an OWL file and inspect it in some other tool.

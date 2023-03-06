@@ -3,22 +3,19 @@ import os
 import tempfile
 
 import omega_format
-from .converter_functions.utils import *
-from .converter_functions.dynamics.road_user import *
-from .converter_functions.dynamics.misc_object import *
-from .converter_functions.weather.weather import *
-from .converter_functions.road.road import *
-from .converter_functions.road.road_object import *
-from .converter_functions.road.sign import *
-from .converter_functions.road.state import *
-from .converter_functions.road.boundary import *
-from .converter_functions.road.structural_object import *
-from .converter_functions.road.flat_marking import *
-from .converter_functions.road.lane import *
-from .converter_functions.road.lateral_marking import *
-
-# Constants
-MAX_SCENARIO_DURATION = 50  # s, longer scenarios will not be converted
+from converter_functions.utils import *
+from converter_functions.dynamics.road_user import *
+from converter_functions.dynamics.misc_object import *
+from converter_functions.weather.weather import *
+from converter_functions.road.road import *
+from converter_functions.road.road_object import *
+from converter_functions.road.sign import *
+from converter_functions.road.state import *
+from converter_functions.road.boundary import *
+from converter_functions.road.structural_object import *
+from converter_functions.road.flat_marking import *
+from converter_functions.road.lane import *
+from converter_functions.road.lateral_marking import *
 
 # Logging
 logger = logging.getLogger(__name__)
@@ -212,7 +209,7 @@ def _to_auto(rr: omega_format.ReferenceRecording, world: owlready2.World, scene_
 
 
 def convert(omega_file="inD.hdf5", onto_path="pyauto/auto", cp=False, scenarios=None, sampling_rate=1, start_offset=0,
-            end_offset=0) -> list:
+            end_offset=0, max_scenario_duration=None) -> list:
     """
     Main entry function for OMEGA to A.U.T.O. conversion.
     :param omega_file: the HDF5 file to load the OMEGA data from.
@@ -222,6 +219,7 @@ def convert(omega_file="inD.hdf5", onto_path="pyauto/auto", cp=False, scenarios=
     :param sampling_rate: The rate (in Hertz) to which scenarios are reduced. Default is 1 scene per second.
     :param start_offset: The offset to start sampling the scenarios from (in s).
     :param end_offset: The offset to end sampling the scenarios from (in s).
+    :param max_scenario_duration: The maximum duration (in s) of a scenario - longer scenarios are ignored
     :return: The scenarios as extracted by the OMEGA library from the HDF5 file as a list of owlready2 worlds.
     """
     if not start_offset:
@@ -232,8 +230,9 @@ def convert(omega_file="inD.hdf5", onto_path="pyauto/auto", cp=False, scenarios=
     omega_data = _load_hdf5(omega_file)
     logger.debug("Extracting snippets from OMEGA file")
     omega_snippets = omega_data.extract_snippets(ids=scenarios)
-    snippets = list(filter(lambda x: (x.timestamps.val[-1] - x.timestamps.val[0]) <= MAX_SCENARIO_DURATION,
-                           omega_snippets))
+    if max_scenario_duration is not None:
+        snippets = list(filter(lambda x: (x.timestamps.val[-1] - x.timestamps.val[0]) <= max_scenario_duration,
+                               omega_snippets))
     for rr in omega_snippets:
         rr_hz = 1 / (rr.timestamps.val[1] - rr.timestamps.val[0])
         scene_number = int(start_offset * rr_hz)
