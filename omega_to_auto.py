@@ -211,7 +211,7 @@ def _to_auto(rr: omega_format.ReferenceRecording, world: owlready2.World, scene_
     logger.debug("Finished converting OMEGA to OWL")
 
 
-def convert(omega_file="inD.hdf5", onto_path="auto/ontology", cp=False, scenarios=None, sampling_rate=1, start_offset=0,
+def convert(omega_file="inD.hdf5", onto_path="pyauto/auto", cp=False, scenarios=None, sampling_rate=1, start_offset=0,
             end_offset=0) -> list:
     """
     Main entry function for OMEGA to A.U.T.O. conversion.
