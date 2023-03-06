@@ -1,0 +1,3 @@
+[submodule "omega_format"]
+	path = omega_format
+	url = https://github.com/ika-rwth-aachen/omega_format.git
