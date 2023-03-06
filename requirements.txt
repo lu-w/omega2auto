@@ -1,0 +1,3 @@
+shapely
+./pyauto
+./omega_format

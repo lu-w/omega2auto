@@ -1,3 +1,6 @@
 [submodule "omega_format"]
 	path = omega_format
 	url = https://github.com/ika-rwth-aachen/omega_format.git
+[submodule "pyauto"]
+	path = pyauto
+	url = https://github.com/lu-w/pyauto.git
