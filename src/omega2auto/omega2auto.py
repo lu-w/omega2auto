@@ -3,19 +3,19 @@ import os
 import tempfile
 
 import omega_format
-from converter_functions.utils import *
-from converter_functions.dynamics.road_user import *
-from converter_functions.dynamics.misc_object import *
-from converter_functions.weather.weather import *
-from converter_functions.road.road import *
-from converter_functions.road.road_object import *
-from converter_functions.road.sign import *
-from converter_functions.road.state import *
-from converter_functions.road.boundary import *
-from converter_functions.road.structural_object import *
-from converter_functions.road.flat_marking import *
-from converter_functions.road.lane import *
-from converter_functions.road.lateral_marking import *
+from omega2auto.converter_functions.utils import *
+from omega2auto.converter_functions.dynamics.road_user import *
+from omega2auto.converter_functions.dynamics.misc_object import *
+from omega2auto.converter_functions.weather.weather import *
+from omega2auto.converter_functions.road.road import *
+from omega2auto.converter_functions.road.road_object import *
+from omega2auto.converter_functions.road.sign import *
+from omega2auto.converter_functions.road.state import *
+from omega2auto.converter_functions.road.boundary import *
+from omega2auto.converter_functions.road.structural_object import *
+from omega2auto.converter_functions.road.flat_marking import *
+from omega2auto.converter_functions.road.lane import *
+from omega2auto.converter_functions.road.lateral_marking import *
 
 # Logging
 logger = logging.getLogger(__name__)
