@@ -8,23 +8,21 @@ First, initialize all submodules: `git submodule update --init --recursive`.
 
 ### Dependencies
 
-This module requires the `omega_format` module, for which you can find installation instructions in `omega_format/README.md`.
-We moreover require the `pyauto` module, which can be simply installed by `pip install -e pyauto`.
-All requirements are also given in `requirements.txt`.
+Install the requirements by running `pip install -r requirements.txt`.
 
 ### Installation
 
-Install this module by `pip install -e .`.
+Install this module by `pip install .`.
 
 ## Example Usage
 
-This module provides only a single function to its user: `convert()`.
+This module provides only a single function to its user: `convert(...)`.
 Use it e.g. as follows, assuming you have obtained a file `scenario.hdf5` in the OMEGA format.
 
 ```python
 import omega2auto
-scenarios = omega2auto.convert("scenario.hdf5")
-scenarios[0].save("/tmp/scenario0.owl")
+scenarios = omega2auto.convert("scenarios_0_to_100.hdf5")
+scenarios[0].save("/tmp/scenario_0.owl")
 ```
 
 `scenarios` then contains a list of owlready2 worlds, each representing an OMEGA scenario.
