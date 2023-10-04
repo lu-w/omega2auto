@@ -2,20 +2,18 @@ from ..utils import *
 
 
 @monkeypatch(omega_format.RoadObject)
-def to_auto(cls, world: owlready2.World, scenes, identifier=None, parent_identifier=None):
+def to_auto(cls, scenery: Scenery, identifier=None, parent_identifier=None):
 
     # Fetches ontologies
-    ph = auto.get_ontology(auto.Ontology.Physics, world)
-    l1_core = auto.get_ontology(auto.Ontology.L1_Core, world)
-    l1_de = auto.get_ontology(auto.Ontology.L1_DE, world)
-    l2_de = auto.get_ontology(auto.Ontology.L2_DE, world)
-    l5_de = auto.get_ontology(auto.Ontology.L5_DE, world)
+    ph = scenery.ontology(auto.Ontology.Physics)
+    l1_core = scenery.ontology(auto.Ontology.L1_Core)
+    l1_de = scenery.ontology(auto.Ontology.L1_DE)
+    l2_de = scenery.ontology(auto.Ontology.L2_DE)
+    l5_de = scenery.ontology(auto.Ontology.L5_DE)
 
     # Creates road object instance
     road_object = ph.Spatial_Object()
     road_object.identifier = str(parent_identifier) + "_" + str(identifier)
-    for scene in scenes:
-        scene.has_traffic_entity.append(road_object)
 
     if cls.type == omega_format.ReferenceTypes.RoadObjectType.STREET_LAMP:
         road_object.is_a.append(l2_de.Street_Light)
@@ -61,8 +59,8 @@ def to_auto(cls, world: owlready2.World, scenes, identifier=None, parent_identif
         road_object.is_a.append(l1_core.Non_Driveable_Road_Element)
 
     road_object.has_height = float(cls.height)
-    add_geometry_from_polygon(cls, road_object, world)
+    add_geometry_from_polygon(cls, road_object, scenery)
 
-    add_layer_3_information(cls, road_object, world)
+    add_layer_3_information(cls, road_object, scenery)
 
     return [(cls, [road_object])]

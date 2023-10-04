@@ -2,6 +2,8 @@ import owlready2
 import logging
 
 from pyauto import auto
+from pyauto.models.scene import Scene
+from pyauto.models.scenery import Scenery
 import omega_format
 from shapely import geometry, affinity, wkt
 
@@ -24,6 +26,7 @@ def monkeypatch(cls):
 def add_relation(owl_entity, owl_relation: str, target_rr_entity, scene=None):
     # Note: this is untested code
     # Connected object was already converted for this scene
+    # TODO pyauto update
     if scene and hasattr(target_rr_entity, "last_owl_instance") and \
             target_rr_entity.last_owl_instance[0].in_scene[0] == scene:
         setattr(owl_entity, owl_relation, target_rr_entity.last_owl_instance)
@@ -45,9 +48,9 @@ def instantiate_relations(to_rr_entity):
                                " but could not identify target.")
 
 
-def add_layer_3_information(cls, owl_entity, world):
+def add_layer_3_information(cls, owl_entity, scene):
     if hasattr(cls, "layer_flag") and cls.layer_flag:
-        owl_entity.is_a.append(auto.get_ontology(auto.Ontology.L3_Core, world).Modifying_Entity)
+        owl_entity.is_a.append(scene.ontology(auto.Ontology.L3_Core).Modifying_Entity)
         if hasattr(cls, "overrides") and cls.overrides:
             for overrides in cls.overrides.data.values():
                 # overriddenBy is omitted since it is modelled as the inverse of modifies in OWL
@@ -63,7 +66,7 @@ def add_bounding_box(cls, owl_inst):
         owl_inst.has_height = float(cls.bb.vec[2])
 
 
-def add_geometry_from_polygon(cls, owl_inst, world):
+def add_geometry_from_polygon(cls, owl_inst, scene):
     poly = cls.polyline
     wkt_string = "POLYGON (("
     if max(poly.pos_z) == 0 and cls.height > 0:
@@ -78,13 +81,13 @@ def add_geometry_from_polygon(cls, owl_inst, world):
             wkt_string += str(poly.pos_x[i]) + " " + str(poly.pos_y[i]) + " " + str(poly.pos_z[i]) + ", "
         wkt_string = wkt_string[0:-2] + " ))"
     geom = wkt.loads(wkt_string)
-    inst_geom = auto.get_ontology(auto.Ontology.GeoSPARQL, world).Geometry()
+    inst_geom = scene.ontology(auto.Ontology.GeoSPARQL).Geometry()
     inst_geom.asWKT = [str(geom)]
     owl_inst.hasGeometry = [inst_geom]
 
 
-def add_geometry_from_trajectory(cls, owl_inst, time, world):
-    owl_inst_geometry = auto.get_ontology(auto.Ontology.GeoSPARQL, world).Geometry()
+def add_geometry_from_trajectory(cls, owl_inst, time, scene: Scene):
+    owl_inst_geometry = scene.ontology(auto.Ontology.GeoSPARQL).Geometry()
     l11 = (cls.tr.pos_x[time] - 0.5 * owl_inst.has_length, cls.tr.pos_y[time] -
            0.5 * owl_inst.has_width, cls.tr.pos_z[time])
     l12 = (cls.tr.pos_x[time] - 0.5 * owl_inst.has_length, cls.tr.pos_y[time] +

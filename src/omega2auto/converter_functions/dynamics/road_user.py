@@ -2,15 +2,15 @@ from ..utils import *
 
 
 @monkeypatch(omega_format.RoadUser)
-def to_auto(cls, world: owlready2.World, scene, identifier=None):
-    s = scene.inTimePosition[1].numericPosition[0] - cls.birth
+def to_auto(cls, scene: Scene, scene_number: int, identifier=None):
+    s = scene_number - cls.birth
 
     # Fetches ontologies
-    pe = auto.get_ontology(auto.Ontology.Perception, world)
-    ph = auto.get_ontology(auto.Ontology.Physics, world)
-    geo = auto.get_ontology(auto.Ontology.GeoSPARQL, world)
-    l4_core = auto.get_ontology(auto.Ontology.L4_Core, world)
-    l4_de = auto.get_ontology(auto.Ontology.L4_DE, world)
+    pe = scene.ontology(auto.Ontology.Perception)
+    ph = scene.ontology(auto.Ontology.Physics)
+    geo = scene.ontology(auto.Ontology.GeoSPARQL)
+    l4_core = scene.ontology(auto.Ontology.L4_Core)
+    l4_de = scene.ontology(auto.Ontology.L4_DE)
 
     # Creates road user instance
     if cls.sub_type == omega_format.ReferenceTypes.RoadUserSubTypeMOTORCYCLE.WITHOUT_RIDER or \
@@ -23,8 +23,6 @@ def to_auto(cls, world: owlready2.World, scene, identifier=None):
         ru = l4_core.Human()
         ru.is_a.append(pe.Observer)
         traffic_object = False
-    scene.has_traffic_entity.append(ru)
-    ru.in_scene.append(scene)
 
     # Stores road user type
     if cls.type == omega_format.ReferenceTypes.RoadUserType.PEDESTRIAN:
@@ -81,7 +79,7 @@ def to_auto(cls, world: owlready2.World, scene, identifier=None):
         is_a = l4_de.Carriage
     else:
         drives_something = False
-    # Sub types
+    # Subtypes
     if cls.sub_type == omega_format.ReferenceTypes.RoadUserSubTypeGeneral.EMERGENCY:
         is_a.append(l4_de.Emergency_Vehicle)
     if cls.sub_type == omega_format.ReferenceTypes.RoadUserSubTypeGeneral.CONSTRUCTION:
@@ -91,7 +89,6 @@ def to_auto(cls, world: owlready2.World, scene, identifier=None):
     if drives_something and not traffic_object:
         veh = l4_core.Vehicle()
         veh.is_a.append(is_a)
-        scene.has_traffic_entity.append(veh)
         ru.drives = [veh]
         phys_repr = veh
         # Vehicle will get its own geometrical properties later, store those for the driver now.
@@ -110,45 +107,45 @@ def to_auto(cls, world: owlready2.World, scene, identifier=None):
     # Store bounding box
     add_bounding_box(cls, phys_repr)
     # Store geometrical properties
-    add_geometry_from_trajectory(cls, phys_repr, s, world)
+    add_geometry_from_trajectory(cls, phys_repr, s, scene)
 
     # Store vehicle lights
-    if cls.vehicle_lights.indicator_right[s] != -1:
+    if len(cls.vehicle_lights.indicator_right) > s and cls.vehicle_lights.indicator_right[s] != -1:
         light = l4_de.Indicator_Light_Right()
         if cls.vehicle_lights.indicator_right[s] == 0:
             light.is_a.append(ph.Inactive_Lamp)
         elif cls.vehicle_lights.indicator_right[s] == 1:
             light.is_a.append(ph.Active_Lamp)
         phys_repr.has_part.append(light)
-    if cls.vehicle_lights.indicator_left[s] != -1:
+    if len(cls.vehicle_lights.indicator_left) > s and cls.vehicle_lights.indicator_left[s] != -1:
         light = l4_de.Indicator_Light_Left()
         if cls.vehicle_lights.indicator_left[s] == 0:
             light.is_a.append(ph.Inactive_Lamp)
         elif cls.vehicle_lights.indicator_left[s] == 1:
             light.is_a.append(ph.Active_Lamp)
         phys_repr.has_part.append(light)
-    if cls.vehicle_lights.brake_lights[s] != -1:
+    if len(cls.vehicle_lights.brake_lights) > s and cls.vehicle_lights.brake_lights[s] != -1:
         light = l4_de.Brake_Light()
         if cls.vehicle_lights.brake_lights[s] == 0:
             light.is_a.append(ph.Inactive_Lamp)
         elif cls.vehicle_lights.brake_lights[s] == 1:
             light.is_a.append(ph.Active_Lamp)
         phys_repr.has_part.append(light)
-    if cls.vehicle_lights.headlights[s] != -1:
+    if len(cls.vehicle_lights.headlights) > s and cls.vehicle_lights.headlights[s] != -1:
         light = l4_de.Headlight()
         if cls.vehicle_lights.headlights[s] == 0:
             light.is_a.append(ph.Inactive_Lamp)
         elif cls.vehicle_lights.headlights[s] == 1:
             light.is_a.append(ph.Active_Lamp)
         phys_repr.has_part.append(light)
-    if cls.vehicle_lights.reverseing_lights[s] != -1:
+    if len(cls.vehicle_lights.reverseing_lights) > s and cls.vehicle_lights.reverseing_lights[s] != -1:
         light = l4_de.Reversing_Light()
         if cls.vehicle_lights.reverseing_lights[s] == 0:
             light.is_a.append(ph.Inactive_Lamp)
         elif cls.vehicle_lights.reverseing_lights[s] == 1:
             light.is_a.append(ph.Active_Lamp)
         phys_repr.has_part.append(light)
-    if cls.vehicle_lights.blue_light[s] != -1:
+    if len(cls.vehicle_lights.blue_light) > s and cls.vehicle_lights.blue_light[s] != -1:
         light = l4_de.Emergency_Light()
         if cls.vehicle_lights.blue_light[s] == 0:
             light.is_a.append(ph.Inactive_Lamp)
@@ -156,9 +153,7 @@ def to_auto(cls, world: owlready2.World, scene, identifier=None):
             light.is_a.append(ph.Active_Lamp)
         phys_repr.has_part.append(light)
     ru.identifier = identifier
-    # TODO debug, remove
-    if len(ru.drives) > 0 and len(ru.drives[0].hasGeometry) == 0:
-        raise ValueError("Found RU that drives smth but the vehicle has no geom: " + str(ru) + " - " + str(ru.drives))
+
     # Map RR instance to one or two OWL individuals
     if phys_repr is ru:
         return [(cls, [ru])]

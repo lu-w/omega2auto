@@ -2,17 +2,15 @@ from ..utils import *
 
 
 @monkeypatch(omega_format.MiscObject)
-def to_auto(cls, world: owlready2.World, scene, identifier=None):
-    s = scene.inTimePosition[1].numericPosition[0] - cls.birth
-    mo = auto.get_ontology(auto.Ontology.Physics, world).Spatial_Object()
+def to_auto(cls, scene: Scene, scene_number: int, identifier=None):
+    s = scene_number - cls.birth
+    mo = scene.ontology(auto.Ontology.Physics).Spatial_Object()
     mo.identifier = identifier
-    scene.has_traffic_entity.append(mo)
-    mo.in_scene.append(scene)
     mo.identifier = cls.id
     # Store type and sub_type
     # We ignore 'misc' type and do not set any specific subclass (open world assumption)
-    l4_de = auto.get_ontology(auto.Ontology.L4_DE, world)
-    l4_core = auto.get_ontology(auto.Ontology.L4_Core, world)
+    l4_de = scene.ontology(auto.Ontology.L4_DE)
+    l4_core = scene.ontology(auto.Ontology.L4_Core)
     if cls.type == omega_format.ReferenceTypes.MiscObjectType.ANIMAL:
         mo.is_a.append(l4_core.Animal)
         if cls.sub_type == omega_format.ReferenceTypes.MiscObjectSubType.DOG:
@@ -32,5 +30,5 @@ def to_auto(cls, world: owlready2.World, scene, identifier=None):
     # Store bounding box
     add_bounding_box(cls, mo)
     # Store geometrical properties
-    add_geometry_from_trajectory(cls, mo, s, world)
+    add_geometry_from_trajectory(cls, mo, s, scene)
     return [(cls, [mo])]

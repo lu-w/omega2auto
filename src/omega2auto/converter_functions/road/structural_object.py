@@ -2,19 +2,17 @@ from ..utils import *
 
 
 @monkeypatch(omega_format.StructuralObject)
-def to_auto(cls, world: owlready2.World, scenes, identifier=None, parent_identifier=None):
+def to_auto(cls, scenery, identifier=None, parent_identifier=None):
 
     # Fetches ontologies
-    ph = auto.get_ontology(auto.Ontology.Physics, world)
-    l2_core = auto.get_ontology(auto.Ontology.L2_Core, world)
-    l2_de = auto.get_ontology(auto.Ontology.L2_DE, world)
-    l3_de = auto.get_ontology(auto.Ontology.L3_DE, world)
+    ph = scenery.ontology(auto.Ontology.Physics)
+    l2_core = scenery.ontology(auto.Ontology.L2_Core)
+    l2_de = scenery.ontology(auto.Ontology.L2_DE)
+    l3_de = scenery.ontology(auto.Ontology.L3_DE)
 
     # Creates structural object instance
     structural_object = ph.Spatial_Object()
     structural_object.identifier = str(parent_identifier) + "_" + str(identifier)
-    for scene in scenes:
-        scene.has_traffic_entity.append(structural_object)
 
     if cls.type == omega_format.ReferenceTypes.StructuralObjectType.VEGETATION:
         structural_object.is_a.append(l2_core.Road_Side_Vegetation)
@@ -49,8 +47,8 @@ def to_auto(cls, world: owlready2.World, scenes, identifier=None, parent_identif
 
     structural_object.has_height = float(cls.height)
 
-    add_geometry_from_polygon(cls, structural_object, world)
+    add_geometry_from_polygon(cls, structural_object, scenery)
 
-    add_layer_3_information(cls, structural_object, world)
+    add_layer_3_information(cls, structural_object, scenery)
 
     return [(cls, [structural_object])]

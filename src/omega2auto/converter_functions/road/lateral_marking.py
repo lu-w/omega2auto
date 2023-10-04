@@ -3,13 +3,13 @@ from ..utils import *
 
 
 @monkeypatch(omega_format.LateralMarking)
-def to_auto(cls, world: owlready2.World, scenes, identifier=None, parent_identifier=None):
+def to_auto(cls, scenery: Scenery, identifier=None, parent_identifier=None, parent_geometry=None):
 
     # Fetches ontologies
-    ph = auto.get_ontology(auto.Ontology.Physics, world)
-    geo = auto.get_ontology(auto.Ontology.GeoSPARQL, world)
-    l1_de = auto.get_ontology(auto.Ontology.L1_DE, world)
-    l2_de = auto.get_ontology(auto.Ontology.L2_DE, world)
+    ph = scenery.ontology(auto.Ontology.Physics)
+    geo = scenery.ontology(auto.Ontology.GeoSPARQL)
+    l1_de = scenery.ontology(auto.Ontology.L1_DE)
+    l2_de = scenery.ontology(auto.Ontology.L2_DE)
 
     # Creates marker instance
     if not cls.type == omega_format.ReferenceTypes.LateralMarkingType.REFLECTORS_LAMPS:
@@ -19,9 +19,6 @@ def to_auto(cls, world: owlready2.World, scenes, identifier=None, parent_identif
         marker = l2_de.Reflective_Raised_Pavement_Marker_Boundary_System()
         reflector_system = True
     marker.identifier = str(parent_identifier) + "_" + str(identifier)
-
-    for scene in scenes:
-        scene.has_traffic_entity.append(marker)
 
     # Type
     marked_object = None
@@ -72,7 +69,9 @@ def to_auto(cls, world: owlready2.World, scenes, identifier=None, parent_identif
                       str(cls.polyline.pos_z[i]) + ", "
     wkt_string = wkt_string[:-2] + " )"
     geom = wkt.loads(wkt_string)
-    geom = geom.buffer(float(cls.long_size), cap_style=2)
+    geom = geom.buffer(float(cls.long_size / 2), cap_style=2)
+    if parent_geometry is not None:
+        geom = geom.intersection(parent_geometry)
     mark_geom = geo.Geometry()
     mark_geom.asWKT = [str(geom)]
     # Case 1: Standard lateral marker
@@ -89,6 +88,6 @@ def to_auto(cls, world: owlready2.World, scenes, identifier=None, parent_identif
     else:
         marker.is_a.append(ph.System & ph.consists_of.only(ph.Spatial_Object & geo.sfWithin.value(mark_geom)))
 
-    add_layer_3_information(cls, marker, world)
+    add_layer_3_information(cls, marker, scenery)
 
     return [(cls, [marker])]
