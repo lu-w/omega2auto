@@ -116,7 +116,7 @@ def _to_auto(rr: omega_format.ReferenceRecording, hertz: int = None, start_offse
         road.to_auto(scenery, i)
 
     scenes = []
-    for scene_number in np.arange(start_offset * rr_hz, int(snippet_end-snippet_start) * rr_hz, rr_hz / hertz):
+    for scene_number in np.arange(snippet_start * rr_hz, snippet_end * rr_hz, round(rr_hz / hertz)):
         scene_number = int(scene_number)
         t = scene_number / rr_hz
 
@@ -175,27 +175,6 @@ def _to_auto(rr: omega_format.ReferenceRecording, hertz: int = None, start_offse
                         rel[0].connected_to = entity.last_owl_instance
                 entity.owl_relations = []
 
-        # Remove actors within parking vehicles as they should not have actors.
-        # TODO make this also work for non-parking space vehicles
-        l2_de = scene.ontology(auto.Ontology.L2_DE)
-        l4_core = scene.ontology(auto.Ontology.L4_Core)
-        for vehicle in scene.search(type=l4_core.Vehicle):
-            if vehicle.has_velocity_x is not None and vehicle.has_velocity_y is not None and \
-                    vehicle.has_velocity_z is not None:
-                speed = math.sqrt(
-                    vehicle.has_velocity_x ** 2 + vehicle.has_velocity_y ** 2 + vehicle.has_velocity_z ** 2)
-                if math.isclose(speed, 0) and len(vehicle.INVERSE_drives) > 0:
-                    for parking_space in scene.search(type=l2_de.Parking_Space):
-                        if hasattr(parking_space, "hasGeometry") and len(parking_space.hasGeometry) > 0:
-                            geo_vehicle = wkt.loads(vehicle.hasGeometry[0].asWKT[0])
-                            geo_parking_space = wkt.loads(parking_space.hasGeometry[0].asWKT[0])
-                            if geo_vehicle.intersects(geo_parking_space):
-                                if len(vehicle.INVERSE_drives) > 1:
-                                    for obs in vehicle.INVERSE_drives:
-                                        obs.drives.remove(vehicle)
-                                else:
-                                    owlready2.destroy_entity(vehicle.INVERSE_drives[0])
-
     # Extra iteration over all scenes for sign states as they can only be created after road infrastructure
     for scene_number, scene in enumerate(scenes):
         for sign_state in rr.states.values():
@@ -207,7 +186,6 @@ def _to_auto(rr: omega_format.ReferenceRecording, hertz: int = None, start_offse
         instantiate_relations(rr_inst)
 
     logger.debug("Finished converting OMEGA to OWL")
-
     return Scenario(scenes=scenes, scenery=scenery, folder=folder, load_cp=cp)
 
 

@@ -1,3 +1,7 @@
+import math
+
+import owlready2
+
 from ..utils import *
 
 
@@ -11,30 +15,6 @@ def to_auto(cls, scene: Scene, scene_number: int, identifier=None):
     geo = scene.ontology(auto.Ontology.GeoSPARQL)
     l4_core = scene.ontology(auto.Ontology.L4_Core)
     l4_de = scene.ontology(auto.Ontology.L4_DE)
-
-    # Creates road user instance
-    if cls.sub_type == omega_format.ReferenceTypes.RoadUserSubTypeMOTORCYCLE.WITHOUT_RIDER or \
-            cls.sub_type == omega_format.ReferenceTypes.RoadUserSubTypeBICYCLE.WITHOUT_RIDER or \
-            cls.sub_type == omega_format.ReferenceTypes.RoadUserSubTypeWHEELCHAIR.WITHOUT_RIDER or \
-            cls.sub_type == omega_format.ReferenceTypes.RoadUserSubTypePERSONAL_MOBILITY_DEVICE.WITHOUT_RIDER:
-        ru = l4_core.Traffic_Object()
-        traffic_object = True
-    else:
-        ru = l4_core.Human()
-        ru.is_a.append(pe.Observer)
-        traffic_object = False
-
-    # Stores road user type
-    if cls.type == omega_format.ReferenceTypes.RoadUserType.PEDESTRIAN:
-        ru.is_a.append(l4_core.Pedestrian)
-        if cls.sub_type == omega_format.ReferenceTypes.RoadUserSubTypePEDESTRIAN.CHILD:
-            ru.is_a.append(l4_de.Child)
-        elif cls.sub_type == omega_format.ReferenceTypes.RoadUserSubTypePEDESTRIAN.ADULT:
-            ru.is_a.append(l4_de.Adult)
-    elif cls.type == omega_format.ReferenceTypes.RoadUserType.REGULAR:
-        ru.is_a.append(l4_core.Traffic_Subject)
-    if len(ru.is_a) > 0 and cls.type == omega_format.ReferenceTypes.RoadUserSubTypeGeneral.CONSTRUCTION:
-        ru.is_a.append(l4_de.Road_Worker)
 
     # Creates vehicle, if given
     drives_something = True
@@ -85,6 +65,30 @@ def to_auto(cls, scene: Scene, scene_number: int, identifier=None):
     if cls.sub_type == omega_format.ReferenceTypes.RoadUserSubTypeGeneral.CONSTRUCTION:
         is_a.append(l4_de.Construction_Vehicle)
 
+    # Creates road user instance
+    if cls.sub_type == omega_format.ReferenceTypes.RoadUserSubTypeMOTORCYCLE.WITHOUT_RIDER or \
+            cls.sub_type == omega_format.ReferenceTypes.RoadUserSubTypeBICYCLE.WITHOUT_RIDER or \
+            cls.sub_type == omega_format.ReferenceTypes.RoadUserSubTypeWHEELCHAIR.WITHOUT_RIDER or \
+            cls.sub_type == omega_format.ReferenceTypes.RoadUserSubTypePERSONAL_MOBILITY_DEVICE.WITHOUT_RIDER:
+        ru = l4_core.Traffic_Object()
+        traffic_object = True
+    else:
+        ru = l4_core.Human()
+        ru.is_a.append(pe.Observer)
+        traffic_object = False
+
+    # Stores road user type
+    if cls.type == omega_format.ReferenceTypes.RoadUserType.PEDESTRIAN:
+        ru.is_a.append(l4_core.Pedestrian)
+        if cls.sub_type == omega_format.ReferenceTypes.RoadUserSubTypePEDESTRIAN.CHILD:
+            ru.is_a.append(l4_de.Child)
+        elif cls.sub_type == omega_format.ReferenceTypes.RoadUserSubTypePEDESTRIAN.ADULT:
+            ru.is_a.append(l4_de.Adult)
+    elif cls.type == omega_format.ReferenceTypes.RoadUserType.REGULAR:
+        ru.is_a.append(l4_core.Traffic_Subject)
+    if len(ru.is_a) > 0 and cls.type == omega_format.ReferenceTypes.RoadUserSubTypeGeneral.CONSTRUCTION:
+        ru.is_a.append(l4_de.Road_Worker)
+
     # Decide which individual is the physical representation (driven objects vs. non-driven objects)
     if drives_something and not traffic_object:
         veh = l4_core.Vehicle()
@@ -96,7 +100,7 @@ def to_auto(cls, scene: Scene, scene_number: int, identifier=None):
         ru_geometry.asWKT = [geometry.Point(cls.tr.pos_x[s], cls.tr.pos_y[s], cls.tr.pos_z[s]).wkt]
         ru.hasGeometry = [ru_geometry]
     else:
-        # If no vehicle is given, the road itself is the physical representation (e.g. a pedestrian).
+        # If no vehicle is given, the road user itself is the physical representation (e.g. a pedestrian).
         phys_repr = ru
 
     if cls.connected_to:
@@ -108,6 +112,15 @@ def to_auto(cls, scene: Scene, scene_number: int, identifier=None):
     add_bounding_box(cls, phys_repr)
     # Store geometrical properties
     add_geometry_from_trajectory(cls, phys_repr, s, scene)
+
+    # Check for parking / standing vehicles on not intersecting a drivable lane completely, for which we do not assume
+    # a driver to be present
+    lanes_geom = scene._scenery.get_all_driveable_lanes_geometry()
+    is_parking_vehicle = (math.isclose(math.sqrt(cls.tr.vel_z[s]**2 + cls.tr.vel_z[s]**2 + cls.tr.vel_z[s]**2), 0)
+                          and not lanes_geom.contains(wkt.loads(phys_repr.hasGeometry[0].asWKT[0])))
+    if drives_something and not traffic_object and is_parking_vehicle:
+        owlready2.destroy_entity(ru)
+        ru = phys_repr
 
     # Store vehicle lights
     if len(cls.vehicle_lights.indicator_right) > s and cls.vehicle_lights.indicator_right[s] != -1:
