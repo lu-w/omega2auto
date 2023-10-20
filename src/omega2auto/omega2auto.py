@@ -42,19 +42,14 @@ def _load_hdf5(omega_file="inD.hdf5"):
 
 def _add_identity_information(instance_tuples):
     """
-    Adds the identity relation that tracks same objects over multiple scenes based on the information returned by the
-    `to_auto` functions.
+    Stores the last OWL instance of the given reference recording instance.
     :param instance_tuples: A list of tuples with the first entry being a OMEGA object, the second one begin a list of
     corresponding OWL individuals representing the first entry. Each time iteration, the same list sorting of the second
     entry is expected.
     """
     for rr_inst, owl_inst in instance_tuples:
-        for i, inst in enumerate(owl_inst):
-            try:
-                inst.identical_to = [rr_inst.last_owl_instance[i]]
-            except AttributeError:
-                pass
-        setattr(rr_inst, "last_owl_instance", owl_inst)
+        if len(owl_inst) == 1:
+            setattr(rr_inst, "last_owl_instance", owl_inst)
 
 
 def _get_speed_limit(rr: omega_format.ReferenceRecording) -> int or None:
@@ -112,15 +107,21 @@ def _to_auto(rr: omega_format.ReferenceRecording, hertz: int = None, start_offse
     # Convert static infrastructure
     logger.debug("Converting " + str(len(rr.roads.values())) + " roads")
     scenery = Scenery(load_cp=cp, folder=folder)
+    converted_rr_scenery_entities = []
     for i, road in enumerate(rr.roads.values()):
-        road.to_auto(scenery, i)
+        converted_rr_scenery_entities += road.to_auto(scenery, i)
+    _add_identity_information(converted_rr_scenery_entities)
+    for rr_inst in converted_rr_scenery_entities:
+        instantiate_relations(rr_inst[0])
 
     scenes = []
-    for scene_number in np.arange(snippet_start * rr_hz, snippet_end * rr_hz, round(rr_hz / hertz)):
+    scene_numbers = np.arange(snippet_start * rr_hz, snippet_end * rr_hz, round(rr_hz / hertz))
+    for iteration, scene_number in enumerate(scene_numbers):
         scene_number = int(scene_number)
         t = scene_number / rr_hz
 
-        logger.debug("Scene " + str(scene_number + 1) + " (" + str(t) + "s) / " + str(len(rr.timestamps.val)))
+        logger.debug("Scene " + str(iteration + 1) + " (" + str(t) + "s, #" + str(scene_number) + ") / " +
+                     str(len(scene_numbers)))
 
         # Note: already passing scenery here. If we do it later, we might create clashes with individual names.
         scene = Scene(timestamp=float(t), folder=folder, load_cp=cp, scenery=scenery)
@@ -132,14 +133,13 @@ def _to_auto(rr: omega_format.ReferenceRecording, hertz: int = None, start_offse
         # Convert road users and ego vehicle
         road_users_s = [x for x in {k: v for k, v in rr.road_users.items()}.items() if
                         x[1].birth <= scene_number <= x[1].end]
-        if rr.ego_vehicle.birth <= scene_number <= rr.ego_vehicle.end:
+        if rr.ego_vehicle is not None and rr.ego_vehicle.birth <= scene_number <= rr.ego_vehicle.end:
             road_users_s.append((rr.ego_vehicle.id, rr.ego_vehicle))
         logger.debug("Converting " + str(len(road_users_s)) + " road users")
         for i, road_user in road_users_s:
             user_instances = road_user.to_auto(scene, scene_number, i)
             converted_rr_entities += user_instances
             road_user.owl_entity = user_instances
-            _add_identity_information(user_instances)
 
         # Convert misc objects
         misc_objects_s = [x for x in {k: v for k, v in rr.misc_objects.items()}.items() if
@@ -148,7 +148,6 @@ def _to_auto(rr: omega_format.ReferenceRecording, hertz: int = None, start_offse
         for i, misc in misc_objects_s:
             misc_instances = misc.to_auto(scene, scene_number, i)
             converted_rr_entities += misc_instances
-            _add_identity_information(misc_instances)
 
         # Convert traffic sign states
         logger.debug("Converting " + str(len(rr.states.values())) + " traffic sign states")
@@ -156,34 +155,26 @@ def _to_auto(rr: omega_format.ReferenceRecording, hertz: int = None, start_offse
             state_s = traffic_sign_state.values[scene_number]
             state_instances = state_s.to_auto(scene, scene_number)
             converted_rr_entities += state_instances
-            _add_identity_information(state_instances)
 
         # Convert weather
         if rr.weather is not None:
             logger.debug("Converting weather")
             weather_instances = rr.weather.to_auto(scene, scene_number)
             converted_rr_entities += weather_instances
-            _add_identity_information(weather_instances)
         else:
             logger.debug("No weather information present in recording")
 
-        # Set correct relations between created entities in case those were not settable during time of creation
-        for i, entity in converted_rr_entities:
-            if hasattr(entity[0], "owl_relations"):
-                for rel in entity[0].owl_relations:
-                    if rel[1] == "connected_to":
-                        rel[0].connected_to = entity.last_owl_instance
-                entity.owl_relations = []
-
-    # Extra iteration over all scenes for sign states as they can only be created after road infrastructure
-    for scene_number, scene in enumerate(scenes):
+        # Convert sign states
         for sign_state in rr.states.values():
             sign_state.to_auto(scene, scene_number)
 
-    # Final step: Set references to relations correctly
-    for rr_inst in list(rr.road_users.values()) + list(rr.misc_objects.values()) + list(rr.roads.values()) + \
-                   list(rr.states.values()) + list(rr.states.values()) + [l for ll in rr.roads.values() for l in ll]:
-        instantiate_relations(rr_inst)
+        # Update last_owl_instance information
+        _add_identity_information(converted_rr_entities)
+
+        # Final step: Set references to relations correctly (also for scenery: new entities may point to scenery
+        # elements)
+        for rr_inst in converted_rr_entities + converted_rr_scenery_entities:
+            instantiate_relations(rr_inst[0])
 
     logger.debug("Finished converting OMEGA to OWL")
     return Scenario(scenes=scenes, scenery=scenery, folder=folder, load_cp=cp)
@@ -196,7 +187,8 @@ def convert(omega_file="inD.hdf5", folder="pyauto/auto", cp=False, scenarios=Non
     :param omega_file: the HDF5 file to load the OMEGA data from.
     :param folder: The path to the folder in which A.U.T.O. is located.
     :param cp: Whether to also load the two criticality phenomena ontologies (needed for criticality inference).
-    :param scenarios: An optional list of scenario IDs (as integers) which shall be selected. The rest is then ignored.
+    :param scenarios: An optional list of scenario IDs (as names of the road users) which shall be selected.
+        The rest is then ignored.
     :param hertz: The sampling rate (in Hertz) to which scenarios are reduced. Default is using the fully sampling rate
         of the recording.
     :param start_offset: The offset to start sampling the scenarios from (in s).

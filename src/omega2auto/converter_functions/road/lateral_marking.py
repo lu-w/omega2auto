@@ -70,8 +70,12 @@ def to_auto(cls, scenery: Scenery, identifier=None, parent_identifier=None, pare
     wkt_string = wkt_string[:-2] + " )"
     geom = wkt.loads(wkt_string)
     geom = geom.buffer(float(cls.long_size / 2), cap_style=2)
-    if parent_geometry is not None:
-        geom = geom.intersection(parent_geometry)
+    if parent_geometry:
+        # allowing 30cm of wiggle room here
+        intersection = geom.intersection(parent_geometry.buffer(0.3))
+        # only cut to parent geometry (e.g. for pedestrian crossings) if the result is not empty
+        if not intersection.is_empty:
+            geom = intersection
     mark_geom = geo.Geometry()
     mark_geom.asWKT = [str(geom)]
     # Case 1: Standard lateral marker

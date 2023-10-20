@@ -116,7 +116,8 @@ def to_auto(cls, scene: Scene, scene_number: int, identifier=None):
     # Check for parking / standing vehicles on not intersecting a drivable lane completely, for which we do not assume
     # a driver to be present
     lanes_geom = scene._scenery.get_all_driveable_lanes_geometry()
-    is_parking_vehicle = (math.isclose(math.sqrt(cls.tr.vel_z[s]**2 + cls.tr.vel_z[s]**2 + cls.tr.vel_z[s]**2), 0)
+    is_parking_vehicle = (math.isclose(math.sqrt(cls.tr.vel_longitudinal[s]**2 + cls.tr.vel_lateral[s]**2 +
+                                                 cls.tr.vel_z[s]**2), 0)
                           and not lanes_geom.contains(wkt.loads(phys_repr.hasGeometry[0].asWKT[0])))
     if drives_something and not traffic_object and is_parking_vehicle:
         owlready2.destroy_entity(ru)

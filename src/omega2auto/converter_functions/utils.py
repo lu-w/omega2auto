@@ -23,13 +23,16 @@ def monkeypatch(cls):
 
 # Utils
 
-def add_relation(owl_entity, owl_relation: str, target_rr_entity, scene=None):
-    # Note: this is untested code
-    # Connected object was already converted for this scene
-    # TODO pyauto update
+def add_relation(owl_entity, owl_relation: str, target_rr_entity, scene: Scene = None):
     if scene and hasattr(target_rr_entity, "last_owl_instance") and \
-            target_rr_entity.last_owl_instance[0].in_scene[0] == scene:
-        setattr(owl_entity, owl_relation, target_rr_entity.last_owl_instance)
+            target_rr_entity.last_owl_instance[0].world == scene:
+        if isinstance(getattr(owl_entity, owl_relation), list):
+            setattr(owl_entity, owl_relation, getattr(owl_entity, owl_relation) + target_rr_entity.last_owl_instance)
+        elif len(target_rr_entity.last_owl_instance) == 1:
+            setattr(owl_entity, owl_relation, target_rr_entity.last_owl_instance[0])
+        else:
+            logger.warning("Could not set " + str(owl_entity) + "." + owl_relation + " to " +
+                           str(target_rr_entity.last_owl_instance) + "(on-the-fly mode).")
     # Connected object does not yet exist, store relation to be added later
     else:
         if hasattr(target_rr_entity, "owl_relations"):
@@ -41,11 +44,19 @@ def add_relation(owl_entity, owl_relation: str, target_rr_entity, scene=None):
 def instantiate_relations(to_rr_entity):
     if hasattr(to_rr_entity, "owl_relations"):
         for from_owl_entity, owl_relation in to_rr_entity.owl_relations:
-            if hasattr(to_rr_entity, "last_owl_entity"):
-                getattr(from_owl_entity, owl_relation).append(to_rr_entity.last_owl_entity)
+            if hasattr(to_rr_entity, "last_owl_instance"):
+                if isinstance(getattr(from_owl_entity, owl_relation), list):
+                    setattr(from_owl_entity, owl_relation, getattr(from_owl_entity, owl_relation) +
+                            to_rr_entity.last_owl_instance)
+                elif len(to_rr_entity.last_owl_instance) == 1:
+                    setattr(from_owl_entity, owl_relation, to_rr_entity.last_owl_instance[0])
+                else:
+                    logger.warning("Could not set " + str(from_owl_entity) + "." + owl_relation + " to " +
+                                   str(to_rr_entity.last_owl_instance))
             else:
                 logger.warning("Tried to add relation " + owl_relation + " to " + str(from_owl_entity) +
-                               " but could not identify target.")
+                               " but could not identify target (a-posteriori mode).")
+        to_rr_entity.owl_relations = []
 
 
 def add_layer_3_information(cls, owl_entity, scene):

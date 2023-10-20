@@ -102,22 +102,22 @@ def to_auto(cls, scenery: Scenery, identifier=None, parent_identifier=None):
     # Add flat markers
     instances = []
     for i, marker in enumerate(cls.flat_markings.data.values()):
-        marker_inst = marker.to_auto(scenery, i, lane.identifier[0])
+        marker_inst = marker.to_auto(scenery, i, lane.identifier + "_0")
         marker_inst[0][1][0].applies_to.append(lane)
         instances += marker_inst
 
     # Add boundaries
     for i, boundary in enumerate(cls.boundaries.data.values()):
-        boundary_inst = boundary.to_auto(scenery, cls, i, lane.identifier[0])
+        boundary_inst = boundary.to_auto(scenery, cls, i, lane.identifier + "_1")
         if len(boundary_inst[0][1]) > 0:
             boundary_inst[0][1][0].applies_to.append(lane)
             instances += boundary_inst
 
     # Add lane predecessor and successors
     for pred in cls.predecessors.data.values():
-        add_relation(lane, "has_predecessor_lane", pred)
+        add_relation(lane, "has_predecessor_lane", pred, scenery)
     for succ in cls.successors.data.values():
-        add_relation(lane, "has_successor_lane", succ)
+        add_relation(lane, "has_successor_lane", succ, scenery)
 
     add_layer_3_information(cls, lane, scenery)
 

@@ -162,11 +162,11 @@ def to_auto(cls, scenery: Scenery, identifier=None, parent_identifier=None):
 
     # Weather dependent
     if cls.time_dependent:
-        sign.is_a.append(l1_de.Wather_Dependent_Sign_Post)
+        sign.is_a.append(l1_de.Time_Dependent_Sign_Post)
 
     # Time dependent
     if cls.weather_dependent:
-        sign.is_a.append(l1_de.Time_Dependent_Sign_Post)
+        sign.is_a.append(l1_de.Weather_Dependent_Sign_Post)
 
     # Heading
     if cls.heading != 0:
