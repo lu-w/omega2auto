@@ -2,6 +2,13 @@ import math
 import os
 import tempfile
 
+import numpy as np
+import pyauto.visualizer.visualizer
+from pyauto import auto
+from pyauto.models.scenario import Scenario
+from pyauto.models.scene import Scene
+from pyauto.models.scenery import Scenery
+
 import omega_format
 from omega2auto.converter_functions.utils import *
 from omega2auto.converter_functions.dynamics.road_user import *
@@ -35,19 +42,14 @@ def _load_hdf5(omega_file="inD.hdf5"):
 
 def _add_identity_information(instance_tuples):
     """
-    Adds the identity relation that tracks same objects over multiple scenes based on the information returned by the
-    `to_auto` functions.
+    Stores the last OWL instance of the given reference recording instance.
     :param instance_tuples: A list of tuples with the first entry being a OMEGA object, the second one begin a list of
     corresponding OWL individuals representing the first entry. Each time iteration, the same list sorting of the second
     entry is expected.
     """
     for rr_inst, owl_inst in instance_tuples:
-        for i, inst in enumerate(owl_inst):
-            try:
-                inst.identical_to = [rr_inst.last_owl_instance[i]]
-            except AttributeError:
-                pass
-        setattr(rr_inst, "last_owl_instance", owl_inst)
+        if len(owl_inst) == 1:
+            setattr(rr_inst, "last_owl_instance", owl_inst)
 
 
 def _get_speed_limit(rr: omega_format.ReferenceRecording) -> int or None:
@@ -75,192 +77,144 @@ def _get_speed_limit(rr: omega_format.ReferenceRecording) -> int or None:
     return None
 
 
-def _to_auto(rr: omega_format.ReferenceRecording, world: owlready2.World, scene_number=None):
+def _to_auto(rr: omega_format.ReferenceRecording, hertz: int = None, start_offset=0, end_offset=0,
+             folder="pyauto/auto", cp=False) -> Scenario:
     """
     Main converter function - converts all instances within the reference recording to A.U.T.O. instances. Uses the
     monkey-patched converter functions.
     :param rr: The reference recording to convert from.
-    :param world: The owlready2 world to convert into.
-    :param scene_number: Whether to only convert a specific scene # (if None, converts all scenes modulo downsampling
-    rate)
+    :param hertz: An optional sampling rate (so that recordings can be down sampled when loading into A.U.T.O.)
+        Note: The recording's sampling rate *has* to be a multiple of this sampling rate, if given.
+    :param start_offset: The offset to start sampling the scenarios from (in s).
+    :param end_offset: The offset to end sampling the scenarios from (in s).
+    :param folder: The path to the folder in which A.U.T.O. is located.
+    :param cp: Whether to also load the two criticality phenomena ontologies (needed for criticality inference).
     """
-    # Creates and populates scene for every time point
-    scenes = []
+    snippet_start = rr.timestamps.val[0] + start_offset
+    snippet_end = rr.timestamps.val[-1] - end_offset
+    if snippet_start >= snippet_end:
+        logger.warning("Invalid snippet start / end offsets. Defaulting to 0.")
+        snippet_start = rr.timestamps.val[0]
+        snippet_end = rr.timestamps.val[-1]
+    rr_hz = int(1 / (rr.timestamps.val[1] - rr.timestamps.val[0]))
+    if not hertz:
+        hertz = rr_hz
+
+    logger.debug("Loading scenario from " + str(str(snippet_start)) + "s - " + str(str(snippet_end)) + "s")
 
     speed_limit = _get_speed_limit(rr)
 
-    for s, t in enumerate(rr.timestamps.val):
-        if s == scene_number:
-            logger.debug("Scene " + str(s + 1) + " (" + str(t) + "s) / " + str(len(rr.timestamps.val)))
-
-            # Create scene
-            time = auto.get_ontology(auto.Ontology.Time, world).TimePosition()
-            sequence = auto.get_ontology(auto.Ontology.Time, world).TimePosition()
-            time.numericPosition = [float(t)]
-            sequence.numericPosition = [s]
-            scene = auto.get_ontology(auto.Ontology.Traffic_Model, world).Scene()
-            scene.inTimePosition.append(time)
-            scene.inTimePosition.append(sequence)
-            scene.has_speed_limit = speed_limit
-            if len(scenes) > 0:
-                scene.after = [scenes[-1]]
-
-            # Convert road users and ego vehicle
-            road_users_s = [x for x in {k: v for k, v in rr.road_users.items()}.items() if x[1].birth <= s <= x[1].end]
-            road_users_s.append((rr.ego_vehicle.id, rr.ego_vehicle))
-            logger.debug("Converting " + str(len(road_users_s)) + " road users")
-            for i, road_user in road_users_s:
-                user_instances = road_user.to_auto(world, scene, i)
-                road_user.owl_entity = user_instances
-                _add_identity_information(user_instances)
-
-            # Convert misc objects
-            misc_objects_s = [x for x in {k: v for k, v in rr.misc_objects.items()}.items() if x[1].birth <= s <=
-                              x[1].end]
-            logger.debug("Converting " + str(len(misc_objects_s)) + " misc entities")
-            for i, misc in misc_objects_s:
-                misc_instances = misc.to_auto(world, scene, i)
-                _add_identity_information(misc_instances)
-
-            # Convert traffic sign states
-            logger.debug("Converting " + str(len(rr.states.values())) + " traffic sign states")
-            for traffic_sign_state in rr.states.values():
-                state_s = traffic_sign_state.values[s]
-                state_instances = state_s.to_auto(world, scene)
-                _add_identity_information(state_instances)
-
-            # Convert weather
-            logger.debug("Converting weather")
-            weather_instances = rr.weather.to_auto(world, scene)
-            _add_identity_information(weather_instances)
-
-            # Set correct relations between created entities in case those were not settable during time of creation
-            for i, entity in road_users_s + misc_objects_s:
-                if entity.last_owl_instance[0].in_scene[0] == scene:
-                    if hasattr(entity, "owl_relations"):
-                        for rel in entity.owl_relations:
-                            if rel[1] == "connected_to":
-                                rel[0].connected_to = entity.last_owl_instance
-                        entity.owl_relations = []
-                else:
-                    logger.warning("Found traffic entity " + str(entity) + " that was not converted during scene!")
-
-            scenes.append(scene)
-
-    # Convert static infrastructure, same for every scene (at the end as we need to link against all scenes)
+    # Convert static infrastructure
     logger.debug("Converting " + str(len(rr.roads.values())) + " roads")
+    scenery = Scenery(load_cp=cp, folder=folder)
+    converted_rr_scenery_entities = []
     for i, road in enumerate(rr.roads.values()):
-        road_instances = road.to_auto(world, scenes, i)
-        # Road instances can be conveniently handled when merging to avoid creating multiple instances
-        for ri in road_instances:
-            for ri_list in ri[1]:
-                ri_list.is_persistent = True
-                if hasattr(ri_list, "hasGeometry"):
-                    for geo in ri_list.hasGeometry:
-                        geo.is_persistent = True
+        converted_rr_scenery_entities += road.to_auto(scenery, i)
+    _add_identity_information(converted_rr_scenery_entities)
+    for rr_inst in converted_rr_scenery_entities:
+        instantiate_relations(rr_inst[0])
 
-    # Extra iteration over all scenes for sign states as they can only be created after road infrastructure
-    for scene in scenes:
+    scenes = []
+    scene_numbers = np.arange(snippet_start * rr_hz, snippet_end * rr_hz, round(rr_hz / hertz))
+    for iteration, scene_number in enumerate(scene_numbers):
+        scene_number = int(scene_number)
+        t = scene_number / rr_hz
+
+        logger.debug("Scene " + str(iteration + 1) + " (" + str(t) + "s, #" + str(scene_number) + ") / " +
+                     str(len(scene_numbers)))
+
+        # Note: already passing scenery here. If we do it later, we might create clashes with individual names.
+        scene = Scene(timestamp=float(t), folder=folder, load_cp=cp, scenery=scenery)
+        scenes.append(scene)
+        scene.has_speed_limit = speed_limit
+
+        converted_rr_entities = []
+
+        # Convert road users and ego vehicle
+        road_users_s = [x for x in {k: v for k, v in rr.road_users.items()}.items() if
+                        x[1].birth <= scene_number <= x[1].end]
+        if rr.ego_vehicle is not None and rr.ego_vehicle.birth <= scene_number <= rr.ego_vehicle.end:
+            road_users_s.append((rr.ego_vehicle.id, rr.ego_vehicle))
+        logger.debug("Converting " + str(len(road_users_s)) + " road users")
+        for i, road_user in road_users_s:
+            user_instances = road_user.to_auto(scene, scene_number, i)
+            converted_rr_entities += user_instances
+            road_user.owl_entity = user_instances
+
+        # Convert misc objects
+        misc_objects_s = [x for x in {k: v for k, v in rr.misc_objects.items()}.items() if
+                          x[1].birth <= scene_number <= x[1].end]
+        logger.debug("Converting " + str(len(misc_objects_s)) + " misc entities")
+        for i, misc in misc_objects_s:
+            misc_instances = misc.to_auto(scene, scene_number, i)
+            converted_rr_entities += misc_instances
+
+        # Convert traffic sign states
+        logger.debug("Converting " + str(len(rr.states.values())) + " traffic sign states")
+        for traffic_sign_state in rr.states.values():
+            state_s = traffic_sign_state.values[scene_number]
+            state_instances = state_s.to_auto(scene, scene_number)
+            converted_rr_entities += state_instances
+
+        # Convert weather
+        if rr.weather is not None:
+            logger.debug("Converting weather")
+            weather_instances = rr.weather.to_auto(scene, scene_number)
+            converted_rr_entities += weather_instances
+        else:
+            logger.debug("No weather information present in recording")
+
+        # Convert sign states
         for sign_state in rr.states.values():
-            sign_state.to_auto(world, scene)
+            sign_state.to_auto(scene, scene_number)
 
-    # Store temporal information on scenario
-    if len(scenes) > 0 and scene_number is None:
-        scenario = auto.get_ontology(auto.Ontology.Traffic_Model, world).Scenario()
-        scenario.hasBeginning = [scenes[0]]
-        scenario.hasEnd = [scenes[-1]]
-        scenario_duration = auto.get_ontology(auto.Ontology.Time, world).Duration()
-        scenario_duration.numericDuration = [scenes[-1].inTimePosition[0].numericPosition[0] -
-                                             scenes[0].inTimePosition[0].numericPosition[0]]
-        scenario.hasDuration = [scenario_duration]
-        for scene in scenes:
-            scenario.has_traffic_model.append(scene)
+        # Update last_owl_instance information
+        _add_identity_information(converted_rr_entities)
 
-    # Remove scene index number from time information as it can lead to confusion of the reasoner (temporal rules)
-    for scene in scenes:
-        scene.inTimePosition = [scene.inTimePosition[0]]
-
-    # Final step: Set references to relations correctly
-    for rr_inst in list(rr.road_users.values()) + list(rr.misc_objects.values()) + list(rr.roads.values()) + \
-                   list(rr.states.values()) + list(rr.states.values()) + [l for ll in rr.roads.values() for l in ll]:
-        # TODO add more rr instances here?
-        instantiate_relations(rr_inst)
-
-    # Bonus: remove actors within parking vehicles as they should not have actors.
-    l2_de = auto.get_ontology(auto.Ontology.L2_DE, world)
-    l4_core = auto.get_ontology(auto.Ontology.L4_Core, world)
-    for vehicle in world.search(type=l4_core.Vehicle):
-        if vehicle.has_velocity_x is not None and vehicle.has_velocity_y is not None and \
-                vehicle.has_velocity_z is not None:
-            speed = math.sqrt(vehicle.has_velocity_x ** 2 + vehicle.has_velocity_y ** 2 + vehicle.has_velocity_z ** 2)
-            if math.isclose(speed, 0) and len(vehicle.INVERSE_drives) > 0:
-                for parking_space in world.search(type=l2_de.Parking_Space):
-                    if hasattr(parking_space, "hasGeometry") and len(parking_space.hasGeometry) > 0:
-                        geo_vehicle = wkt.loads(vehicle.hasGeometry[0].asWKT[0])
-                        geo_parking_space = wkt.loads(parking_space.hasGeometry[0].asWKT[0])
-                        if geo_vehicle.intersects(geo_parking_space):
-                            if len(vehicle.INVERSE_drives) > 1:
-                                for obs in vehicle.INVERSE_drives:
-                                    obs.drives.remove(vehicle)
-                            else:
-                                owlready2.destroy_entity(vehicle.INVERSE_drives[0])
+        # Final step: Set references to relations correctly (also for scenery: new entities may point to scenery
+        # elements)
+        for rr_inst in converted_rr_entities + converted_rr_scenery_entities:
+            instantiate_relations(rr_inst[0])
 
     logger.debug("Finished converting OMEGA to OWL")
+    return Scenario(scenes=scenes, scenery=scenery, folder=folder, load_cp=cp)
 
 
-def convert(omega_file="inD.hdf5", onto_path="pyauto/auto", cp=False, scenarios=None, sampling_rate=1, start_offset=0,
+def convert(omega_file="inD.hdf5", folder="pyauto/auto", cp=False, scenarios=None, hertz=None, start_offset=0,
             end_offset=0, max_scenario_duration=None) -> list:
     """
     Main entry function for OMEGA to A.U.T.O. conversion.
     :param omega_file: the HDF5 file to load the OMEGA data from.
-    :param onto_path: The path to the folder in which A.U.T.O. is located.
+    :param folder: The path to the folder in which A.U.T.O. is located.
     :param cp: Whether to also load the two criticality phenomena ontologies (needed for criticality inference).
-    :param scenarios: An optional list of scenario IDs (as integers) which shall be selected. The rest is then ignored.
-    :param sampling_rate: The rate (in Hertz) to which scenarios are reduced. Default is 1 scene per second.
+    :param scenarios: An optional list of scenario IDs (as names of the road users) which shall be selected.
+        The rest is then ignored.
+    :param hertz: The sampling rate (in Hertz) to which scenarios are reduced. Default is using the fully sampling rate
+        of the recording.
     :param start_offset: The offset to start sampling the scenarios from (in s).
     :param end_offset: The offset to end sampling the scenarios from (in s).
     :param max_scenario_duration: The maximum duration (in s) of a scenario - longer scenarios are ignored
     :return: The scenarios as extracted by the OMEGA library from the HDF5 file as a list of owlready2 worlds.
     """
-    if not start_offset:
+    if start_offset is None:
         start_offset = 0
-    if not end_offset:
+    if end_offset is None:
         end_offset = 0
-    worlds = []
+    loaded_scenarios = []
     omega_data = _load_hdf5(omega_file)
     logger.debug("Extracting snippets from OMEGA file")
-    omega_snippets = omega_data.extract_snippets(ids=scenarios)
-    if max_scenario_duration is not None:
-        snippets = list(filter(lambda x: (x.timestamps.val[-1] - x.timestamps.val[0]) <= max_scenario_duration,
-                               omega_snippets))
-    for rr in omega_snippets:
-        rr_hz = 1 / (rr.timestamps.val[1] - rr.timestamps.val[0])
-        scene_number = int(start_offset * rr_hz)
-        snippet_start = rr.timestamps.val[0] + start_offset
-        snippet_end = rr.timestamps.val[-1] - end_offset
-        if snippet_start >= snippet_end:
-            logger.warning("Invalid snippet start / end offsets. Defaulting to 0.")
-            snippet_start = rr.timestamps.val[0]
-            snippet_end = rr.timestamps.val[-1]
-        logger.debug("Creating OWL world for snippet " + str(scene_number) + "/" + str(len(snippets)) + " (" +
-                     str(str(snippet_start)) + "s - " + str(str(snippet_end)) + "s)")
-        number_of_scenes = int(int(snippet_end - snippet_start) * sampling_rate)
-        if number_of_scenes > 1:
-            scene_jumps = (((snippet_end - snippet_start) * rr_hz) - 1) // (number_of_scenes - 1)
-        else:
-            scene_jumps = 1
-        brave_new_worlds = [owlready2.World(
-            filename=os.path.join(tempfile.gettempdir(), next(tempfile._get_candidate_names())))
-            for _ in range(number_of_scenes)]
-        for brave_new_world in brave_new_worlds:
-            if cp:
-                auto.load_cp(onto_path, brave_new_world)
-            else:
-                auto.load(onto_path, brave_new_world)
-            if scene_number == int(start_offset * rr_hz):
-                logger.debug("Size of TBox: " + str(len([x for x in brave_new_world.graph._iter_triples()])) +
-                             " triples")
-            _to_auto(rr, brave_new_world, scene_number=scene_number)
-            scene_number += scene_jumps
-        worlds.append(brave_new_worlds)
-    return worlds
+    # TODO revert once omega_format master has been updated
+    try:
+        omega_snippets = omega_data.extract_snippets(ids=scenarios)
+        if max_scenario_duration is not None:
+            omega_snippets = list(filter(
+                lambda x: (x.timestamps.val[-1] - x.timestamps.val[0]) <= max_scenario_duration, omega_snippets))
+    except AssertionError:
+        omega_snippets = [omega_data]
+    snippets_len = len(omega_snippets)
+    for i, rr in enumerate(omega_snippets):
+        logger.debug("Creating OWL worlds for snippet " + str(i) + "/" + str(snippets_len))
+        snippet_scenario = _to_auto(rr, hertz=hertz, start_offset=start_offset, end_offset=end_offset, folder=folder,
+                                    cp=cp)
+        loaded_scenarios.append(snippet_scenario)
+    return loaded_scenarios

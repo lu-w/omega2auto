@@ -2,6 +2,8 @@ import owlready2
 import logging
 
 from pyauto import auto
+from pyauto.models.scene import Scene
+from pyauto.models.scenery import Scenery
 import omega_format
 from shapely import geometry, affinity, wkt
 
@@ -21,12 +23,16 @@ def monkeypatch(cls):
 
 # Utils
 
-def add_relation(owl_entity, owl_relation: str, target_rr_entity, scene=None):
-    # Note: this is untested code
-    # Connected object was already converted for this scene
+def add_relation(owl_entity, owl_relation: str, target_rr_entity, scene: Scene = None):
     if scene and hasattr(target_rr_entity, "last_owl_instance") and \
-            target_rr_entity.last_owl_instance[0].in_scene[0] == scene:
-        setattr(owl_entity, owl_relation, target_rr_entity.last_owl_instance)
+            target_rr_entity.last_owl_instance[0].world == scene:
+        if isinstance(getattr(owl_entity, owl_relation), list):
+            setattr(owl_entity, owl_relation, getattr(owl_entity, owl_relation) + target_rr_entity.last_owl_instance)
+        elif len(target_rr_entity.last_owl_instance) == 1:
+            setattr(owl_entity, owl_relation, target_rr_entity.last_owl_instance[0])
+        else:
+            logger.warning("Could not set " + str(owl_entity) + "." + owl_relation + " to " +
+                           str(target_rr_entity.last_owl_instance) + "(on-the-fly mode).")
     # Connected object does not yet exist, store relation to be added later
     else:
         if hasattr(target_rr_entity, "owl_relations"):
@@ -38,16 +44,24 @@ def add_relation(owl_entity, owl_relation: str, target_rr_entity, scene=None):
 def instantiate_relations(to_rr_entity):
     if hasattr(to_rr_entity, "owl_relations"):
         for from_owl_entity, owl_relation in to_rr_entity.owl_relations:
-            if hasattr(to_rr_entity, "last_owl_entity"):
-                getattr(from_owl_entity, owl_relation).append(to_rr_entity.last_owl_entity)
+            if hasattr(to_rr_entity, "last_owl_instance"):
+                if isinstance(getattr(from_owl_entity, owl_relation), list):
+                    setattr(from_owl_entity, owl_relation, getattr(from_owl_entity, owl_relation) +
+                            to_rr_entity.last_owl_instance)
+                elif len(to_rr_entity.last_owl_instance) == 1:
+                    setattr(from_owl_entity, owl_relation, to_rr_entity.last_owl_instance[0])
+                else:
+                    logger.warning("Could not set " + str(from_owl_entity) + "." + owl_relation + " to " +
+                                   str(to_rr_entity.last_owl_instance))
             else:
                 logger.warning("Tried to add relation " + owl_relation + " to " + str(from_owl_entity) +
-                               " but could not identify target.")
+                               " but could not identify target (a-posteriori mode).")
+        to_rr_entity.owl_relations = []
 
 
-def add_layer_3_information(cls, owl_entity, world):
+def add_layer_3_information(cls, owl_entity, scene):
     if hasattr(cls, "layer_flag") and cls.layer_flag:
-        owl_entity.is_a.append(auto.get_ontology(auto.Ontology.L3_Core, world).Modifying_Entity)
+        owl_entity.is_a.append(scene.ontology(auto.Ontology.L3_Core).Modifying_Entity)
         if hasattr(cls, "overrides") and cls.overrides:
             for overrides in cls.overrides.data.values():
                 # overriddenBy is omitted since it is modelled as the inverse of modifies in OWL
@@ -63,7 +77,7 @@ def add_bounding_box(cls, owl_inst):
         owl_inst.has_height = float(cls.bb.vec[2])
 
 
-def add_geometry_from_polygon(cls, owl_inst, world):
+def add_geometry_from_polygon(cls, owl_inst, scene):
     poly = cls.polyline
     wkt_string = "POLYGON (("
     if max(poly.pos_z) == 0 and cls.height > 0:
@@ -78,13 +92,13 @@ def add_geometry_from_polygon(cls, owl_inst, world):
             wkt_string += str(poly.pos_x[i]) + " " + str(poly.pos_y[i]) + " " + str(poly.pos_z[i]) + ", "
         wkt_string = wkt_string[0:-2] + " ))"
     geom = wkt.loads(wkt_string)
-    inst_geom = auto.get_ontology(auto.Ontology.GeoSPARQL, world).Geometry()
+    inst_geom = scene.ontology(auto.Ontology.GeoSPARQL).Geometry()
     inst_geom.asWKT = [str(geom)]
     owl_inst.hasGeometry = [inst_geom]
 
 
-def add_geometry_from_trajectory(cls, owl_inst, time, world):
-    owl_inst_geometry = auto.get_ontology(auto.Ontology.GeoSPARQL, world).Geometry()
+def add_geometry_from_trajectory(cls, owl_inst, time, scene: Scene):
+    owl_inst_geometry = scene.ontology(auto.Ontology.GeoSPARQL).Geometry()
     l11 = (cls.tr.pos_x[time] - 0.5 * owl_inst.has_length, cls.tr.pos_y[time] -
            0.5 * owl_inst.has_width, cls.tr.pos_z[time])
     l12 = (cls.tr.pos_x[time] - 0.5 * owl_inst.has_length, cls.tr.pos_y[time] +

@@ -1,22 +1,19 @@
-import omega_format
 from ..utils import *
 
 
 @monkeypatch(omega_format.Lane)
-def to_auto(cls, world: owlready2.World, scenes, identifier=None, parent_identifier=None):
+def to_auto(cls, scenery: Scenery, identifier=None, parent_identifier=None):
     # Note: classification and sub_type are ignored as this can be easily inferred by spatial properties
 
     # Fetches ontologies
-    geo = auto.get_ontology(auto.Ontology.GeoSPARQL, world)
-    l1_core = auto.get_ontology(auto.Ontology.L1_Core, world)
-    l1_de = auto.get_ontology(auto.Ontology.L1_DE, world)
-    l2_core = auto.get_ontology(auto.Ontology.L2_Core, world)
+    geo = scenery.ontology(auto.Ontology.GeoSPARQL)
+    l1_core = scenery.ontology(auto.Ontology.L1_Core)
+    l1_de = scenery.ontology(auto.Ontology.L1_DE)
+    l2_core = scenery.ontology(auto.Ontology.L2_Core)
 
     # Creates lane instance
     lane = l1_core.Lane()
     lane.identifier = str(parent_identifier) + "_" + str(identifier)
-    for scene in scenes:
-        scene.has_traffic_entity.append(lane)
 
     # Stores geometrical properties
     poly_left = cls.border_left.value.polyline
@@ -105,23 +102,23 @@ def to_auto(cls, world: owlready2.World, scenes, identifier=None, parent_identif
     # Add flat markers
     instances = []
     for i, marker in enumerate(cls.flat_markings.data.values()):
-        marker_inst = marker.to_auto(world, scenes, i, lane.identifier[0])
+        marker_inst = marker.to_auto(scenery, i, lane.identifier + "_0")
         marker_inst[0][1][0].applies_to.append(lane)
         instances += marker_inst
 
     # Add boundaries
     for i, boundary in enumerate(cls.boundaries.data.values()):
-        boundary_inst = boundary.to_auto(world, scenes, cls, i, lane.identifier[0])
+        boundary_inst = boundary.to_auto(scenery, cls, i, lane.identifier + "_1")
         if len(boundary_inst[0][1]) > 0:
             boundary_inst[0][1][0].applies_to.append(lane)
             instances += boundary_inst
 
     # Add lane predecessor and successors
     for pred in cls.predecessors.data.values():
-        add_relation(lane, "has_predecessor_lane", pred)
+        add_relation(lane, "has_predecessor_lane", pred, scenery)
     for succ in cls.successors.data.values():
-        add_relation(lane, "has_successor_lane", succ)
+        add_relation(lane, "has_successor_lane", succ, scenery)
 
-    add_layer_3_information(cls, lane, world)
+    add_layer_3_information(cls, lane, scenery)
 
     return [(cls, [lane])] + instances

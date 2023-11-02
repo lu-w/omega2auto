@@ -2,19 +2,17 @@ from ..utils import *
 
 
 @monkeypatch(omega_format.FlatMarking)
-def to_auto(cls, world: owlready2.World, scenes, identifier=None, parent_identifier=None):
+def to_auto(cls, scenery: Scenery, identifier=None, parent_identifier=None):
 
     # Fetches ontologies
-    ph = auto.get_ontology(auto.Ontology.Physics, world)
-    geo = auto.get_ontology(auto.Ontology.GeoSPARQL, world)
-    l1_core = auto.get_ontology(auto.Ontology.L1_Core, world)
-    l1_de = auto.get_ontology(auto.Ontology.L1_DE, world)
+    ph = scenery.ontology(auto.Ontology.Physics)
+    geo = scenery.ontology(auto.Ontology.GeoSPARQL)
+    l1_core = scenery.ontology(auto.Ontology.L1_Core)
+    l1_de = scenery.ontology(auto.Ontology.L1_DE)
 
     # Creates marking instance
     marker = l1_core.Road_Marker()
     marker.identifier = str(parent_identifier) + "_" + str(identifier)
-    for scene in scenes:
-        scene.has_traffic_entity.append(marker)
 
     # Stores value (digits) as lettering
     if cls.value > 0:
@@ -131,13 +129,13 @@ def to_auto(cls, world: owlready2.World, scenes, identifier=None, parent_identif
         marker.is_a.append(l1_de.Road_Marker_Amphibian)
     elif cls.type == omega_format.ReferenceTypes.FlatMarkingType.AVENUE:
         marker.is_a.append(l1_de.Road_Marker_Avenue)
-    elif cls.type == omega_format.ReferenceTypes.FlatMarkingType.PLAIN:
+    elif cls.type == omega_format.ReferenceTypes.FlatMarkingType.PLANE:
         marker.is_a.append(l1_de.Road_Marker_Plain)
     elif cls.type == omega_format.ReferenceTypes.FlatMarkingType.ELECTRICALVEHICLE:
         marker.is_a.append(l1_de.Road_Marker_Electrical_Vehicle)
     elif cls.type == omega_format.ReferenceTypes.FlatMarkingType.CARSHARING:
         marker.is_a.append(l1_de.Road_Marker_Carsharing)
 
-    add_layer_3_information(cls, marker, world)
+    add_layer_3_information(cls, marker, scenery)
 
     return [(cls, [marker])]

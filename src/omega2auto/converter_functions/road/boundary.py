@@ -2,22 +2,20 @@ from ..utils import *
 
 
 @monkeypatch(omega_format.Boundary)
-def to_auto(cls, world: owlready2.World, scenes, lane, identifier=None, parent_identifier=None):
+def to_auto(cls, scenery: Scenery, lane, identifier=None, parent_identifier=None):
     if cls.type != omega_format.ReferenceTypes.BoundaryType.VIRTUAL:
 
         # Fetches ontologies
-        tm = auto.get_ontology(auto.Ontology.Traffic_Model, world)
-        ph = auto.get_ontology(auto.Ontology.Physics, world)
-        geo = auto.get_ontology(auto.Ontology.GeoSPARQL, world)
-        l1_de = auto.get_ontology(auto.Ontology.L1_DE, world)
-        l2_core = auto.get_ontology(auto.Ontology.L2_Core, world)
-        l2_de = auto.get_ontology(auto.Ontology.L2_DE, world)
+        te = scenery.ontology(auto.Ontology.Descriptive_TE_Core)
+        ph = scenery.ontology(auto.Ontology.Physics)
+        geo = scenery.ontology(auto.Ontology.GeoSPARQL)
+        l1_de = scenery.ontology(auto.Ontology.L1_DE)
+        l2_core = scenery.ontology(auto.Ontology.L2_Core)
+        l2_de = scenery.ontology(auto.Ontology.L2_DE)
 
         # Creates boundary instance
-        boundary = tm.Traffic_Model_Element()
+        boundary = te.Descriptive_Traffic_Entity()
         boundary.identifier = str(parent_identifier) + "_" + str(identifier)
-        for scene in scenes:
-            scene.has_traffic_entity.append(boundary)
 
         # Type
         marker = False
@@ -87,7 +85,7 @@ def to_auto(cls, world: owlready2.World, scenes, lane, identifier=None, parent_i
             boundary.is_a.append(l2_core.Roadside_Construction)
             barrier = True
 
-        # Sub type
+        # Subtype
         if marker:
             # TODO highway width (0.15 & 0.3) - need to fetch road type for this. We assume urban & rural roads for now.
             if cls.type == omega_format.ReferenceTypes.BoundarySubType.THIN:
@@ -140,14 +138,14 @@ def to_auto(cls, world: owlready2.World, scenes, lane, identifier=None, parent_i
             line = lane.border_left.value.polyline
         if not boundary.has_height or boundary.has_height == 0:
             wkt_string = "LINESTRING ( "
-            for i in range(cls.poly_index_start, cls.poly_index_end + 1):
+            for i in range(cls.poly_index_start, min(len(line.pos_x), cls.poly_index_end + 1)):
                 wkt_string += str(line.pos_x[i]) + " " + str(line.pos_y[i]) + " " + str(line.pos_z[i]) + ", "
             wkt_string = wkt_string[:-2] + " )"
         else:
             wkt_string = "POLYGON (( "
-            for i in range(cls.poly_index_start, cls.poly_index_end + 1):
+            for i in range(cls.poly_index_start, min(len(line.pos_x), cls.poly_index_end + 1)):
                 wkt_string += str(line.pos_x[i]) + " " + str(line.pos_y[i]) + " " + str(line.pos_z[i]) + ", "
-            for i in range(cls.poly_index_end, cls.poly_index_start - 1, -1):
+            for i in range(min(len(line.pos_x) - 1, cls.poly_index_end), cls.poly_index_start - 1, -1):
                 wkt_string += str(line.pos_x[i]) + " " + str(line.pos_y[i]) + " " + str(boundary.has_height) + ", "
             wkt_string += str(line.pos_x[cls.poly_index_start]) + " " + str(line.pos_y[cls.poly_index_start]) + " " + \
                           str(line.pos_z[cls.poly_index_start]) + ", "
@@ -164,7 +162,7 @@ def to_auto(cls, world: owlready2.World, scenes, lane, identifier=None, parent_i
             # boundary system needs to be within the geometry
             boundary.is_a.append(ph.System & ph.consists_of.only(ph.Spatial_Object & geo.sfWithin.value(bound_geo)))
 
-        add_layer_3_information(cls, boundary, world)
+        add_layer_3_information(cls, boundary, scenery)
 
         return [(cls, [boundary])]
     else:

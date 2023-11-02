@@ -2,18 +2,18 @@ from ..utils import *
 
 
 @monkeypatch(omega_format.State)
-def to_auto(cls, world: owlready2.World, scene):
+def to_auto(cls, scene: Scene, scene_number: int):
 
     # Fetches ontologies
-    l6_core = auto.get_ontology(auto.Ontology.L6_Core, world)
-    l6_de = auto.get_ontology(auto.Ontology.L6_DE, world)
+    l6_core = scene.ontology(auto.Ontology.L6_Core)
+    l6_de = scene.ontology(auto.Ontology.L6_DE)
 
     owl_instance = cls.sign.last_owl_instance[0]
-    s = scene.inTimePosition[1].numericPosition[0]
-    if s < len(cls.value):
+
+    if scene_number < len(cls.value):
         state = l6_core.Traffic_Light_State()
         owl_instance.delivers_signal.append(state)
-        sign_value = int(cls.value[s])
+        sign_value = int(cls.value[scene_number])
         if sign_value == omega_format.ReferenceTypes.StateValue.GREEN:
             state.is_a.append(l6_de.Green_Light)
         elif sign_value == omega_format.ReferenceTypes.StateValue.AMBER:

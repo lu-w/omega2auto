@@ -1,20 +1,17 @@
-import omega_format
 from ..utils import *
 
 
 @monkeypatch(omega_format.Sign)
-def to_auto(cls, world: owlready2.World, scenes, identifier=None, parent_identifier=None):
+def to_auto(cls, scenery: Scenery, identifier=None, parent_identifier=None):
 
     # Fetches ontologies
-    geo = auto.get_ontology(auto.Ontology.GeoSPARQL, world)
-    l1_core = auto.get_ontology(auto.Ontology.L1_Core, world)
-    l1_de = auto.get_ontology(auto.Ontology.L1_DE, world)
+    geo = scenery.ontology(auto.Ontology.GeoSPARQL)
+    l1_core = scenery.ontology(auto.Ontology.L1_Core)
+    l1_de = scenery.ontology(auto.Ontology.L1_DE)
 
     # Creates sign instance
     sign = l1_core.Traffic_Sign()
     sign.identifier = str(parent_identifier) + "_" + str(identifier)
-    for scene in scenes:
-        scene.has_traffic_entity.append(sign)
 
     # Type
     if cls.type == omega_format.ReferenceTypes.SignType.GIVE_WAY:
@@ -85,10 +82,10 @@ def to_auto(cls, world: owlready2.World, scenes, identifier=None, parent_identif
     elif cls.type == omega_format.ReferenceTypes.SignType.PARKING_RESTRICTED_ZONE_START:
         sign.is_a.append(l1_de.Beginn_eines_eingeschränkten_Haltverbotes_für_eine_Zone)
     elif cls.type == omega_format.ReferenceTypes.SignType.PARKING_RESTRICTED_ZONE_END:
-        sign.is_a.append(l1_de.Ende_eines_eingeschränkten_Haltverbotes_für_eine_Zon)
-    elif cls.type == omega_format.ReferenceTypes.SignType.END_OF_ABSOLUT_PARKING_RESTRICTION_END_RIGHT:
+        sign.is_a.append(l1_de.Ende_eines_eingeschränkten_Haltverbotes_für_eine_Zone)
+    elif cls.type == omega_format.ReferenceTypes.SignType.NO_PARKING_END:
         sign.is_a.append(l1_de.Absolutes_Haltverbot_Ende_Aufstellung_rechts)
-    elif cls.type == omega_format.ReferenceTypes.SignType.BEGIN_OF_ABSOLUT_PARKING_RESTRICTION_END_RIGHT:
+    elif cls.type == omega_format.ReferenceTypes.SignType.NO_PARKING_MID:
         sign.is_a.append(l1_de.Absolutes_Haltverbot_Mitte_Aufstellung_rechts)
     elif cls.type == omega_format.ReferenceTypes.SignType.PARKING_ON_SIDEWALK_HALF_RIGHT_CENTER:
         sign.is_a.append(l1_de.Parken_auf_Gehwegen_halb_in_Fahrtrichtung_rechts_Mitte)
@@ -161,11 +158,11 @@ def to_auto(cls, world: owlready2.World, scenes, identifier=None, parent_identif
 
     # Weather dependent
     if cls.time_dependent:
-        sign.is_a.append(l1_de.Wather_Dependent_Sign_Post)
+        sign.is_a.append(l1_de.Time_Dependent_Sign_Post)
 
     # Time dependent
     if cls.weather_dependent:
-        sign.is_a.append(l1_de.Time_Dependent_Sign_Post)
+        sign.is_a.append(l1_de.Weather_Dependent_Sign_Post)
 
     # Heading
     if cls.heading != 0:
@@ -179,6 +176,6 @@ def to_auto(cls, world: owlready2.World, scenes, identifier=None, parent_identif
     for con_sign in cls.connected_to.data.values():
         add_relation(sign, "connected_to", con_sign)
 
-    add_layer_3_information(cls, sign, world)
+    add_layer_3_information(cls, sign, scenery)
 
     return [(cls, [sign])]
