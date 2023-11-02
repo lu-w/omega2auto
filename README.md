@@ -2,6 +2,8 @@
 
 A Python module that converts the [OMEGA format](https://github.com/ika-rwth-aachen/omega_format/) into [A.U.T.O.](https://github.com/lu-w/auto/) ABoxes based on the [`pyauto` library](https://github.com/lu-w/pyauto/).
 
+![OMEGA2AUTO](./images/omega2auto.svg)
+
 ## Getting Started
 
 First, initialize all submodules: `git submodule update --init --recursive`.
