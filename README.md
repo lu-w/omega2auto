@@ -6,11 +6,14 @@ A Python module that converts the [OMEGA format](https://github.com/ika-rwth-aac
 
 ## Getting Started
 
+OMEGA2AUTO has been tested with Python v3.12. 
+It is recommended to set up a virtual environment.  
 First, initialize all submodules: `git submodule update --init --recursive`.
 
 ### Dependencies
 
-Install the requirements by running `pip install -r requirements.txt`.
+Install the dependencies of pyauto by `cd pyauto; pip install -r requirements.txt`
+Change back into this directory and install the requirements of this module by running `pip install -r requirements.txt`.
 
 ### Installation
 
@@ -22,7 +25,7 @@ This module provides only a single function to its user: `convert(...)`.
 Use it e.g. as follows, assuming you have obtained a file `scenarios_0_to_100.hdf5` in the OMEGA format.
 
 ```python
-import omega2auto
+from omega2auto import omega2auto
 scenarios = omega2auto.convert("scenarios_0_to_100.hdf5")
 ```
 
