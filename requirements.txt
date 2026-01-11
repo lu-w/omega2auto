@@ -1,3 +1,4 @@
-shapely
 ./pyauto
 ./omega_format
+numpy==1.26
+pydantic==1.8.2
